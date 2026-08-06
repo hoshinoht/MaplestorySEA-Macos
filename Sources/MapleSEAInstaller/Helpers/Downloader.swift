@@ -81,7 +81,24 @@ actor Downloader {
 
     // MARK: - Single file via curl
 
+    /// CDNs drop long-lived fast connections now and then (connection reset,
+    /// stall). Every attempt resumes from the bytes already on disk, so
+    /// retrying generously costs almost nothing.
     private func downloadOne(url: URL, in directory: URL) async throws {
+        var lastError: Error?
+        for attempt in 1...8 {
+            do {
+                try await runCurl(url: url, in: directory)
+                return
+            } catch {
+                lastError = error
+                try? await Task.sleep(for: .seconds(min(Double(attempt) * 2, 10)))
+            }
+        }
+        throw lastError ?? StepError("Download of \(url.lastPathComponent) failed.")
+    }
+
+    private func runCurl(url: URL, in directory: URL) async throws {
         let name = url.lastPathComponent
         let destination = directory.appendingPathComponent(name)
         let expected = progress[name]?.total ?? 0
@@ -91,8 +108,9 @@ actor Downloader {
         process.arguments = [
             "--location", "--fail", "--silent", "--show-error",
             "--continue-at", "-",           // resume partial files
-            "--retry", "5", "--retry-delay", "2",
+            "--retry", "5", "--retry-delay", "2", "--retry-all-errors",
             "--connect-timeout", "30",
+            "--speed-limit", "10240", "--speed-time", "30", // abort stalls; outer retry resumes
             "--output", destination.path,
             url.absoluteString,
         ]
