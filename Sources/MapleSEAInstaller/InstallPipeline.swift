@@ -58,7 +58,8 @@ final class InstallPipeline: ObservableObject {
         "download-client": 62,
         "wine-install": 22,
         "launch-args": 2,
-        "wrapper-app": 4,
+        "wrapper-app": 3,
+        "cleanup": 1,
     ]
 
     init(region: RegionConfig) {
@@ -71,6 +72,7 @@ final class InstallPipeline: ObservableObject {
             RunWineInstallerStep(),
             ConfigureLaunchArgsStep(),
             InstallWrapperAppStep(),
+            CleanUpStep(),
         ]
         self.steps = stepImplementations.map { StepState(id: $0.id, title: $0.title) }
     }

@@ -20,6 +20,8 @@ A one-click SwiftUI installer app that automates the whole thing:
 5. **Repoint the launcher** — writes `.ms-launch-args` into the bottle's `drive_c`
    and locks it with `chflags uchg` so the launcher can't delete it.
 6. **Install `MapleStory.app`** — copies the wrapper app to `/Applications`.
+7. **Clean up** — deletes the downloaded installer files (~67 GB) once the game
+   is installed.
 
 Docs site: **https://maplesea.hoshinoht.dev**
 

@@ -13,6 +13,17 @@ enum FileChecks {
         FileManager.default.fileExists(atPath: url.path)
     }
 
+    /// Total on-disk size of a directory tree, 0 if it doesn't exist.
+    static func directorySize(_ url: URL) -> Int64 {
+        guard let enumerator = FileManager.default.enumerator(
+            at: url, includingPropertiesForKeys: [.totalFileAllocatedSizeKey]) else { return 0 }
+        var total: Int64 = 0
+        for case let file as URL in enumerator {
+            total += Int64((try? file.resourceValues(forKeys: [.totalFileAllocatedSizeKey]).totalFileAllocatedSize) ?? 0)
+        }
+        return total
+    }
+
     /// Sets or clears the BSD user-immutable flag (chflags uchg / nouchg).
     static func setImmutable(_ url: URL, _ immutable: Bool) throws {
         try FileManager.default.setAttributes([.immutable: immutable], ofItemAtPath: url.path)
