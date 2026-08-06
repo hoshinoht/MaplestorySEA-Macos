@@ -8,141 +8,134 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🍁</text></svg>">
 <style>
   :root {
-    --sky: #78BDEE; --sky-deep: #4C8FD1;
-    --parchment: #F5E5C2; --parchment-dark: #E8D4A8;
-    --wood: #6B421E; --wood-light: #94612F;
-    --orange: #F58C1F; --orange-deep: #D96B0A;
-    --exp: #A8D633; --exp-deep: #73A81A;
-    --text: #4A2E14; --fail: #D14233;
+    --bg-top: #1A1C30; --bg-bottom: #0D0E1A;
+    --card: rgba(255,255,255,.055); --card-border: rgba(255,255,255,.10);
+    --text: rgba(255,255,255,.95); --text-2: rgba(255,255,255,.55); --text-3: rgba(255,255,255,.32);
+    --orange: #FF8C38; --orange-deep: #ED6B1F;
+    --aqua: #55C7F5; --violet: #8B7BFF;
+    --success: #5BD98A; --fail: #FF6B5E;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
-    font-family: "Nunito", -apple-system, "SF Pro Rounded", "Arial Rounded MT Bold", sans-serif;
-    background: linear-gradient(180deg, var(--sky) 0%, var(--sky-deep) 100%);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+    background: linear-gradient(180deg, var(--bg-top) 0%, var(--bg-bottom) 100%);
     background-attachment: fixed;
     color: var(--text);
     min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
   }
-  .wrap { max-width: 760px; margin: 0 auto; padding: 40px 20px 60px; }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 56px 20px 60px; }
 
-  header { text-align: center; color: #fff; margin-bottom: 30px; }
+  header { text-align: center; margin-bottom: 34px; }
+  header .leaf { font-size: 2.6rem; display: block; margin-bottom: 10px; }
   header h1 {
-    font-size: clamp(2rem, 6vw, 3.2rem);
-    font-weight: 900;
-    text-shadow: 0 3px 0 rgba(107,66,30,.55);
-    letter-spacing: -0.5px;
+    font-size: clamp(1.9rem, 5.5vw, 2.8rem);
+    font-weight: 800; letter-spacing: -0.02em;
   }
-  header h1 .leaf { text-shadow: none; }
+  header h1 .grad {
+    background: linear-gradient(90deg, var(--aqua), var(--violet));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
   header p.tag {
-    font-size: 1.05rem; font-weight: 700; opacity: .95; margin-top: 6px;
+    font-size: 1rem; color: var(--text-2); margin-top: 8px; font-weight: 500;
   }
 
-  .panel {
-    background: var(--parchment);
-    border: 3px solid var(--wood);
-    border-radius: 14px;
-    box-shadow: 0 4px 0 rgba(0,0,0,.25);
-    padding: 22px 24px;
-    margin-bottom: 22px;
-  }
-  .panel h2 {
-    font-size: 1.15rem; font-weight: 900; margin-bottom: 10px;
-    display: flex; align-items: center; gap: 8px;
-  }
-  .panel p, .panel li { font-size: .95rem; line-height: 1.55; }
-  .panel ul, .panel ol { padding-left: 22px; margin-top: 6px; }
-  .panel li { margin-bottom: 5px; }
-  .panel code {
-    background: rgba(107,66,30,.12);
-    border-radius: 5px; padding: 1px 6px;
-    font-family: ui-monospace, "SF Mono", Menlo, monospace;
-    font-size: .85em;
-  }
-  .panel pre {
-    background: rgba(107,66,30,.12);
-    border: 2px solid var(--parchment-dark);
-    border-radius: 8px; padding: 12px 14px;
-    overflow-x: auto; margin: 10px 0;
-  }
-  .panel pre code { background: none; padding: 0; font-size: .82rem; line-height: 1.5; }
-
-  /* Quest step list — mirrors the app's checklist */
-  .quest { list-style: none; padding: 0 !important; }
-  .quest li {
-    display: flex; gap: 12px; align-items: baseline;
-    padding: 9px 4px; border-bottom: 1px solid var(--parchment-dark);
-  }
-  .quest li:last-child { border-bottom: none; }
-  .quest .n {
-    flex: none; width: 24px; height: 24px; border-radius: 50%;
-    background: var(--exp-deep); color: #fff;
-    font-weight: 900; font-size: .8rem;
-    display: inline-flex; align-items: center; justify-content: center;
-    border: 2px solid var(--wood);
-    transform: translateY(4px);
-  }
-  .quest b { font-weight: 800; }
-
-  .cta { text-align: center; margin: 26px 0 34px; }
+  .cta { text-align: center; margin: 28px 0 40px; }
   .btn {
     display: inline-block;
     background: linear-gradient(180deg, var(--orange), var(--orange-deep));
-    color: #fff; text-decoration: none;
-    font-weight: 900; font-size: 1.1rem;
-    padding: 13px 34px; border-radius: 999px;
-    border: 3px solid var(--wood);
-    box-shadow: 0 3px 0 rgba(0,0,0,.3);
-    transition: transform .08s ease;
+    color: rgba(0,0,0,.85); text-decoration: none;
+    font-weight: 700; font-size: 1rem;
+    padding: 12px 30px; border-radius: 999px;
+    border: 1px solid rgba(255,255,255,.25);
+    box-shadow: 0 2px 18px rgba(255,140,56,.35);
+    transition: transform .08s ease, box-shadow .15s ease;
   }
-  .btn:hover { transform: translateY(-1px); }
+  .btn:hover { transform: translateY(-1px); box-shadow: 0 4px 24px rgba(255,140,56,.5); }
   .btn:active { transform: translateY(1px) scale(.98); }
-  .btn.secondary {
-    background: linear-gradient(180deg, var(--parchment), var(--parchment-dark));
-    color: var(--text); font-size: .95rem; padding: 10px 24px;
-  }
-  .cta .sub { color: #fff; font-size: .85rem; font-weight: 700; margin-top: 10px; opacity: .9; }
+  .cta .sub { color: var(--text-3); font-size: .82rem; font-weight: 500; margin-top: 12px; }
 
-  /* EXP-bar divider — the signature */
-  .expbar {
-    display: flex; align-items: center; gap: 10px;
-    margin: 30px auto; max-width: 520px;
+  .panel {
+    background: var(--card);
+    border: 1px solid var(--card-border);
+    border-radius: 14px;
+    padding: 22px 24px;
+    margin-bottom: 18px;
   }
-  .expbar .label {
-    background: var(--exp-deep); color: #fff;
-    border: 2px solid var(--wood); border-radius: 999px;
-    font-size: .7rem; font-weight: 900; padding: 2px 10px;
+  .panel h2 {
+    font-size: 1rem; font-weight: 700; margin-bottom: 10px;
+    display: flex; align-items: center; gap: 8px;
   }
-  .expbar .track {
-    flex: 1; height: 14px; border-radius: 999px;
-    background: rgba(0,0,0,.35); border: 2px solid var(--wood);
-    overflow: hidden;
+  .panel p, .panel li { font-size: .92rem; line-height: 1.6; color: var(--text-2); }
+  .panel b { color: var(--text); font-weight: 600; }
+  .panel ul, .panel ol { padding-left: 20px; margin-top: 6px; }
+  .panel li { margin-bottom: 5px; }
+  .panel a { color: var(--aqua); font-weight: 600; text-decoration: none; }
+  .panel a:hover { text-decoration: underline; }
+  .panel code {
+    background: rgba(255,255,255,.08);
+    border-radius: 5px; padding: 1px 6px;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: .82em; color: var(--text);
   }
-  .expbar .fill {
+  .panel pre {
+    background: rgba(0,0,0,.35);
+    border: 1px solid var(--card-border);
+    border-radius: 10px; padding: 13px 15px;
+    overflow-x: auto; margin: 12px 0;
+  }
+  .panel pre code { background: none; padding: 0; font-size: .8rem; line-height: 1.55; color: var(--text); }
+
+  /* Step list — mirrors the app's checklist */
+  .quest { list-style: none; padding: 0 !important; }
+  .quest li {
+    display: flex; gap: 12px; align-items: baseline;
+    padding: 10px 2px; border-bottom: 1px solid rgba(255,255,255,.06);
+  }
+  .quest li:last-child { border-bottom: none; }
+  .quest .n {
+    flex: none; width: 22px; height: 22px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--aqua), var(--violet));
+    color: rgba(0,0,0,.8);
+    font-weight: 800; font-size: .72rem;
+    display: inline-flex; align-items: center; justify-content: center;
+    transform: translateY(4px);
+  }
+
+  /* Progress-bar divider — the app's signature element */
+  .progress { display: flex; align-items: center; gap: 12px; margin: 34px auto; max-width: 480px; }
+  .progress .track {
+    flex: 1; height: 6px; border-radius: 999px;
+    background: rgba(255,255,255,.08); overflow: hidden;
+  }
+  .progress .fill {
     height: 100%; width: 100%;
-    background: linear-gradient(180deg, var(--exp), var(--exp-deep));
+    background: linear-gradient(90deg, var(--aqua), var(--violet));
     border-radius: 999px;
+    box-shadow: 0 0 10px rgba(85,199,245,.5);
     animation: fill 1.6s ease-out;
   }
+  .progress .pct { font-size: .78rem; color: var(--text-3); font-family: ui-monospace, Menlo, monospace; }
   @keyframes fill { from { width: 0; } to { width: 100%; } }
-  @media (prefers-reduced-motion: reduce) { .expbar .fill { animation: none; } }
+  @media (prefers-reduced-motion: reduce) { .progress .fill { animation: none; } }
 
-  .warn {
-    border-color: var(--orange);
-    background: var(--parchment);
-  }
+  .warn { border-color: rgba(255,140,56,.35); background: rgba(255,140,56,.07); }
+  .warn h2 { color: var(--orange); }
+
   footer {
-    text-align: center; color: #fff; font-size: .8rem;
-    font-weight: 600; opacity: .85; line-height: 1.6;
+    text-align: center; color: var(--text-3); font-size: .78rem;
+    font-weight: 500; line-height: 1.7; margin-top: 36px;
   }
-  footer a { color: #fff; }
+  footer a { color: var(--text-2); }
 </style>
 </head>
 <body>
 <div class="wrap">
 
   <header>
-    <h1><span class="leaf">🍁</span> MapleSEA on Mac</h1>
-    <p class="tag">Quest: run MapleStorySEA natively on Apple Silicon — no VM, no Boot Camp.</p>
+    <span class="leaf">🍁</span>
+    <h1>MapleSEA <span class="grad">on Mac</span></h1>
+    <p class="tag">Run MapleStorySEA natively on Apple Silicon — no VM, no Boot Camp.</p>
   </header>
 
   <div class="cta">
@@ -151,27 +144,27 @@
   </div>
 
   <div class="panel">
-    <h2>⚔️ What this is</h2>
+    <h2>What this is</h2>
     <p>
       Nexon's official <b>GMS macOS client</b> ships a customised Crossover/Wine wrapper.
       This installer repoints that wrapper at <b>MapleStorySEA</b>: it installs the GMS
       launcher if needed, fetches the latest SEA full client straight from PlayPark's
-      servers, runs the installer under Wine (auto-clicking the wizard for you), and wires
-      the launcher to boot MapleSEA directly. One click, one quest, done.
+      servers, runs the installer under Wine (clicking the wizard for you), and wires
+      the launcher to boot MapleSEA directly. One click, done.
     </p>
   </div>
 
-  <div class="expbar" role="presentation">
-    <span class="label">EXP</span>
+  <div class="progress" role="presentation">
     <div class="track"><div class="fill"></div></div>
+    <span class="pct">100%</span>
   </div>
 
   <div class="panel">
-    <h2>📜 The quest line</h2>
+    <h2>What it does, step by step</h2>
     <ol class="quest">
-      <li><span class="n">1</span><span><b>Install the GMS launcher</b> — downloads Nexon's MapleStory.pkg and runs it once to create the Wine bottle. Skipped if you already have it.</span></li>
-      <li><span class="n">2</span><span><b>Find the latest client</b> — scrapes the official MapleSEA download page so you never install a stale version.</span></li>
-      <li><span class="n">3</span><span><b>Download the full client</b> — all parts, resumable, straight from PlayPark's CDN.</span></li>
+      <li><span class="n">1</span><span><b>Install the GMS launcher</b> — downloads Nexon's MapleStory.pkg (signature-verified) and runs it once to create the Wine bottle. Skipped if you already have it.</span></li>
+      <li><span class="n">2</span><span><b>Find the latest client</b> — reads the official MapleSEA download page so you never install a stale version.</span></li>
+      <li><span class="n">3</span><span><b>Download the full client</b> — all parts, resumable, with live speed and time remaining, straight from PlayPark's CDN.</span></li>
       <li><span class="n">4</span><span><b>Run the installer under Wine</b> — the InstallShield wizard is clicked through automatically (needs Accessibility permission; manual clicking works too).</span></li>
       <li><span class="n">5</span><span><b>Repoint the launcher</b> — writes <code>.ms-launch-args</code> into the bottle and locks it so the launcher can't delete it.</span></li>
       <li><span class="n">6</span><span><b>Install MapleStory.app</b> — the wrapper app lands in /Applications, ready to play.</span></li>
@@ -179,7 +172,7 @@
   </div>
 
   <div class="panel">
-    <h2>🔨 Build &amp; run</h2>
+    <h2>Build &amp; run</h2>
     <p>Requires macOS 14+ and the Xcode Command Line Tools (<code>xcode-select --install</code>).</p>
     <pre><code>git clone https://github.com/hoshinoht/MaplestorySEA-Macos.git
 cd MaplestorySEA-Macos
@@ -192,18 +185,18 @@ open "build/MapleSEA Installer.app"</code></pre>
   </div>
 
   <div class="panel warn">
-    <h2>🔑 Permissions it asks for</h2>
+    <h2>Permissions it asks for</h2>
     <ul>
-      <li><b>Administrator password</b> — only to install Nexon's launcher pkg (skipped if already installed).</li>
+      <li><b>Administrator password</b> — only to install Nexon's launcher pkg (skipped if already installed). The pkg's Nexon signature and notarization are verified first.</li>
       <li><b>Accessibility</b> — only to auto-click the InstallShield wizard. Decline it and click Next → Install → Finish yourself.</li>
     </ul>
   </div>
 
   <div class="panel">
-    <h2>❓ FAQ</h2>
+    <h2>FAQ</h2>
     <p><b>Is this a private server or a hack?</b> No. It runs the unmodified official MapleSEA client through Nexon's own macOS Wine wrapper. Every game file is downloaded from official Nexon/PlayPark servers — this project ships zero game content.</p>
     <p style="margin-top:8px"><b>Does this work for other regions?</b> In principle yes — region specifics (CDN, install path, part count) live in one config struct. PRs welcome.</p>
-    <p style="margin-top:8px"><b>Something broke?</b> <a href="https://github.com/hoshinoht/MaplestorySEA-Macos/issues" style="color:var(--orange-deep);font-weight:800">Open an issue</a> with the app's log output.</p>
+    <p style="margin-top:8px"><b>Something broke?</b> <a href="https://github.com/hoshinoht/MaplestorySEA-Macos/issues">Open an issue</a> with the app's log output ("Details" at the bottom of the window).</p>
   </div>
 
   <footer>

@@ -18,9 +18,10 @@ struct InstallGMSLauncherStep: InstallStep {
         if !FileChecks.exists(GMSPaths.launcherApp) {
             let pkg = try await obtainLauncherPkg(pipeline: pipeline)
             try verifyNexonSignature(of: pkg)
-            pipeline.log("Installing \(pkg.lastPathComponent) (admin password prompt)…")
+            let staged = try stageForPrivilegedInstall(pkg)
+            pipeline.log("Installing \(staged.lastPathComponent) (admin password prompt)…")
             try ProcessRunner.runAsAdmin(
-                shellCommand: "installer -pkg \(ProcessRunner.shellQuote(pkg.path)) -target /")
+                shellCommand: "installer -pkg \(ProcessRunner.shellQuote(staged.path)) -target /")
         }
 
         guard FileChecks.exists(GMSPaths.launcherApp) else {
@@ -101,6 +102,21 @@ struct InstallGMSLauncherStep: InstallStep {
             return url
         }
         throw StepError("No pkg link on a trusted Nexon host found")
+    }
+
+    /// The privileged installer process cannot read TCC-protected folders like
+    /// ~/Downloads ("invalid package path"), so copy the pkg into our own
+    /// Application Support directory first. Quarantine is cleared on the copy —
+    /// the signature/notarization check above already vouched for it.
+    private func stageForPrivilegedInstall(_ pkg: URL) throws -> URL {
+        try FileManager.default.createDirectory(at: InstallerPaths.supportDir, withIntermediateDirectories: true)
+        let staged = InstallerPaths.supportDir.appendingPathComponent(pkg.lastPathComponent)
+        if staged != pkg {
+            try? FileManager.default.removeItem(at: staged)
+            try FileManager.default.copyItem(at: pkg, to: staged)
+        }
+        _ = try? ProcessRunner.run("/usr/bin/xattr", ["-d", "com.apple.quarantine", staged.path])
+        return staged
     }
 
     /// The pkg is installed with admin rights, so require Apple's chain of
