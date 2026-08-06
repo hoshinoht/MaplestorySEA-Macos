@@ -3,6 +3,8 @@
 Run **MapleStorySEA** natively on Apple Silicon Macs — no VM, no Boot Camp — by
 repointing the official GMS macOS client's Crossover/Wine wrapper at the SEA client.
 
+<p align="center"><img src="docs/screenshot.png" width="500" alt="MapleSEA Installer mid-install: downloading the client at 150 MB/s with steps checked off"></p>
+
 A one-click SwiftUI installer app that automates the whole thing:
 
 1. **Install the GMS launcher** — downloads Nexon's `MapleStory.pkg` and runs it once

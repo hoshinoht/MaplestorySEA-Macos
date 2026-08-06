@@ -1,8 +1,11 @@
 import Foundation
 
-/// Concurrent, resumable file downloader. Partial files are resumed with HTTP
-/// Range requests, so an interrupted multi-GB client download picks up where it
-/// left off instead of restarting.
+/// Concurrent, resumable file downloader built on the system curl.
+///
+/// curl handles the hard parts natively and fast (HTTP/2, resume via `-C -`,
+/// retries with backoff), and easily saturates a connection where a
+/// Swift-side byte loop caps out. Progress is read by polling the growing
+/// files on disk, so there's no need to intercept the byte stream at all.
 actor Downloader {
     struct FileProgress: Sendable {
         var received: Int64 = 0
@@ -12,19 +15,19 @@ actor Downloader {
 
     private let session: URLSession
     private var progress: [String: FileProgress] = [:]
+    private var activeProcesses: [Process] = []
     private let onProgress: @Sendable (Int64, Int64) -> Void
 
     init(onProgress: @escaping @Sendable (Int64, Int64) -> Void) {
-        let config = URLSessionConfiguration.default
+        let config = URLSessionConfiguration.ephemeral
         config.timeoutIntervalForRequest = 60
-        config.timeoutIntervalForResource = 24 * 60 * 60
         self.session = URLSession(configuration: config)
         self.onProgress = onProgress
     }
 
     /// Downloads all URLs into `directory`, at most `concurrency` at a time.
-    /// Files already fully present are skipped.
-    func downloadAll(urls: [URL], to directory: URL, concurrency: Int = 4) async throws {
+    /// Files already fully present are skipped; partial files are resumed.
+    func downloadAll(urls: [URL], to directory: URL, concurrency: Int = 6) async throws {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
 
         // Learn total sizes up front so overall progress is meaningful.
@@ -38,98 +41,119 @@ actor Downloader {
                 done: expected > 0 && existing >= expected
             )
         }
-        reportProgress()
+        reportProgress(in: directory)
 
-        try await withThrowingTaskGroup(of: Void.self) { group in
-            var iterator = urls.makeIterator()
-            var inFlight = 0
-            while true {
-                while inFlight < concurrency, let url = iterator.next() {
-                    if progress[url.lastPathComponent]?.done == true { continue }
-                    inFlight += 1
-                    group.addTask {
-                        try await self.download(url: url, to: directory)
-                    }
-                }
-                guard inFlight > 0 else { break }
-                try await group.next()
-                inFlight -= 1
+        let poller = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(300))
+                await self?.reportProgress(in: directory)
             }
         }
+        defer {
+            poller.cancel()
+            for process in activeProcesses where process.isRunning { process.terminate() }
+            activeProcesses.removeAll()
+        }
+
+        do {
+            try await withThrowingTaskGroup(of: Void.self) { group in
+                var iterator = urls.makeIterator()
+                var inFlight = 0
+                while true {
+                    while inFlight < concurrency, let url = iterator.next() {
+                        if progress[url.lastPathComponent]?.done == true { continue }
+                        inFlight += 1
+                        group.addTask {
+                            try await self.downloadOne(url: url, in: directory)
+                        }
+                    }
+                    guard inFlight > 0 else { break }
+                    try await group.next()
+                    inFlight -= 1
+                }
+            }
+        } catch {
+            reportProgress(in: directory)
+            throw error
+        }
+        reportProgress(in: directory)
     }
 
-    private func download(url: URL, to directory: URL) async throws {
+    // MARK: - Single file via curl
+
+    private func downloadOne(url: URL, in directory: URL) async throws {
         let name = url.lastPathComponent
         let destination = directory.appendingPathComponent(name)
-        let existing = localSize(destination)
         let expected = progress[name]?.total ?? 0
 
-        var request = URLRequest(url: url)
-        var resumingFrom: Int64 = 0
-        if existing > 0, expected > 0, existing < expected {
-            request.setValue("bytes=\(existing)-", forHTTPHeaderField: "Range")
-            resumingFrom = existing
-        } else if existing > 0, expected > 0, existing >= expected {
-            markDone(name)
-            return
-        }
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/curl")
+        process.arguments = [
+            "--location", "--fail", "--silent", "--show-error",
+            "--continue-at", "-",           // resume partial files
+            "--retry", "5", "--retry-delay", "2",
+            "--connect-timeout", "30",
+            "--output", destination.path,
+            url.absoluteString,
+        ]
+        let errPipe = Pipe()
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = errPipe
 
-        let (bytes, response) = try await session.bytes(for: request)
-        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
-            throw URLError(.badServerResponse)
-        }
-        // Server ignored the Range header → start over.
-        if resumingFrom > 0 && http.statusCode != 206 {
-            resumingFrom = 0
-        }
+        activeProcesses.append(process)
+        defer { activeProcesses.removeAll { $0 === process } }
 
-        if resumingFrom == 0 {
-            FileManager.default.createFile(atPath: destination.path, contents: nil)
-        }
-        let handle = try FileHandle(forWritingTo: destination)
-        defer { try? handle.close() }
-        try handle.seekToEnd()
-        if resumingFrom == 0 {
-            try handle.truncate(atOffset: 0)
-        }
-
-        var received = resumingFrom
-        var buffer = Data(capacity: 1 << 16)
-        for try await byte in bytes {
-            buffer.append(byte)
-            if buffer.count >= 1 << 16 {
-                try handle.write(contentsOf: buffer)
-                received += Int64(buffer.count)
-                buffer.removeAll(keepingCapacity: true)
-                update(name, received: received)
+        try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
+            process.terminationHandler = { _ in cont.resume() }
+            do {
+                try process.run()
+            } catch {
+                process.terminationHandler = nil
+                cont.resume(throwing: error)
             }
         }
-        if !buffer.isEmpty {
-            try handle.write(contentsOf: buffer)
-            received += Int64(buffer.count)
+
+        let status = process.terminationStatus
+        let finalSize = localSize(destination)
+
+        // curl --fail exits 22 on HTTP >= 400. A 416 for a file that is in
+        // fact already complete is a success in disguise.
+        if status != 0 {
+            if status == 22, expected > 0, finalSize >= expected {
+                markDone(name, finalSize: finalSize)
+                return
+            }
+            let stderr = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+            throw StepError("Download of \(name) failed (curl exit \(status)): \(stderr.trimmingCharacters(in: .whitespacesAndNewlines))")
         }
-        markDone(name, finalSize: received)
+        if expected > 0, finalSize < expected {
+            throw StepError("Download of \(name) ended short (\(finalSize) of \(expected) bytes) — retry to resume.")
+        }
+        markDone(name, finalSize: finalSize)
     }
 
     // MARK: - Bookkeeping
 
-    private func update(_ name: String, received: Int64) {
-        progress[name]?.received = received
-        reportProgress()
-    }
-
-    private func markDone(_ name: String, finalSize: Int64? = nil) {
-        if let finalSize { progress[name]?.received = finalSize }
-        if let total = progress[name]?.total, total == 0, let finalSize {
-            progress[name]?.total = finalSize
-        }
+    private func markDone(_ name: String, finalSize: Int64) {
+        progress[name]?.received = finalSize
+        if progress[name]?.total == 0 { progress[name]?.total = finalSize }
         progress[name]?.done = true
-        reportProgress()
     }
 
-    private func reportProgress() {
-        let received = progress.values.reduce(0) { $0 + $1.received }
-        let total = progress.values.reduce(0) { $0 + $1.total }
+    /// Sums real on-disk sizes for in-flight files; done files use their
+    /// recorded size.
+    private func reportProgress(in directory: URL) {
+        var received: Int64 = 0
+        var total: Int64 = 0
+        for (name, file) in progress {
+            total += file.total
+            if file.done {
+                received += file.received
+            } else {
+                let onDisk = localSize(directory.appendingPathComponent(name))
+                received += file.total > 0 ? min(onDisk, file.total) : onDisk
+            }
+        }
         onProgress(received, total)
     }
 

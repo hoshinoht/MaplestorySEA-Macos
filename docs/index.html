@@ -55,6 +55,13 @@
   .btn:active { transform: translateY(1px) scale(.98); }
   .cta .sub { color: var(--text-3); font-size: .82rem; font-weight: 500; margin-top: 12px; }
 
+  .shot { text-align: center; margin: 0 auto 36px; max-width: 480px; }
+  .shot img {
+    width: 100%; height: auto; border-radius: 14px;
+    border: 1px solid var(--card-border);
+    box-shadow: 0 20px 60px rgba(0,0,0,.5);
+  }
+
   .panel {
     background: var(--card);
     border: 1px solid var(--card-border);
@@ -141,6 +148,10 @@
   <div class="cta">
     <a class="btn" href="https://github.com/hoshinoht/MaplestorySEA-Macos">Get it on GitHub</a>
     <p class="sub">Free &amp; open source · MIT licensed · you build it, it installs everything else</p>
+  </div>
+
+  <div class="shot">
+    <img src="screenshot.png" alt="MapleSEA Installer mid-install: downloading the client at 150 MB/s with completed steps checked off">
   </div>
 
   <div class="panel">
