@@ -17,8 +17,10 @@ struct InstallGMSLauncherStep: InstallStep {
     func run(_ context: PipelineContext, pipeline: InstallPipeline) async throws {
         if !FileChecks.exists(GMSPaths.launcherApp) {
             let pkg = try await obtainLauncherPkg(pipeline: pipeline)
+            try verifyNexonSignature(of: pkg)
             pipeline.log("Installing \(pkg.lastPathComponent) (admin password prompt)…")
-            try ProcessRunner.runAsAdmin(shellCommand: "installer -pkg '\(pkg.path)' -target /")
+            try ProcessRunner.runAsAdmin(
+                shellCommand: "installer -pkg \(ProcessRunner.shellQuote(pkg.path)) -target /")
         }
 
         guard FileChecks.exists(GMSPaths.launcherApp) else {
@@ -77,20 +79,39 @@ struct InstallGMSLauncherStep: InstallStep {
         throw StepError("No MapleStory .pkg appeared in ~/Downloads. Download it from \(GMSPaths.nexonLauncherPage.absoluteString) and run this installer again.")
     }
 
+    /// Hosts a launcher pkg may legitimately come from. Anything else found in
+    /// the page HTML (ads, trackers, injected content) is ignored — this pkg
+    /// gets installed with admin rights, so the source must be Nexon's.
+    private static let trustedPkgHostSuffixes = [".nexon.net", ".nexon.com", ".nexonstatic.com"]
+
     private func scrapePkgURL() async throws -> URL {
         var request = URLRequest(url: GMSPaths.nexonLauncherPage)
         request.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)", forHTTPHeaderField: "User-Agent")
         let (data, _) = try await URLSession.shared.data(for: request)
         guard let html = String(data: data, encoding: .utf8) else { throw StepError("Unreadable page") }
-        let pattern = #"https?://[^"'\s]+\.pkg"#
+        let pattern = #"https://[^"'\s]+\.pkg"#
         let regex = try NSRegularExpression(pattern: pattern)
         let range = NSRange(html.startIndex..., in: html)
-        guard let match = regex.firstMatch(in: html, range: range),
-              let matchRange = Range(match.range, in: html),
-              let url = URL(string: String(html[matchRange])) else {
-            throw StepError("No pkg link found")
+        for match in regex.matches(in: html, range: range) {
+            guard let matchRange = Range(match.range, in: html),
+                  let url = URL(string: String(html[matchRange])),
+                  let host = url.host?.lowercased(),
+                  Self.trustedPkgHostSuffixes.contains(where: { host == $0.dropFirst() || host.hasSuffix($0) })
+            else { continue }
+            return url
         }
-        return url
+        throw StepError("No pkg link on a trusted Nexon host found")
+    }
+
+    /// The pkg is installed with admin rights, so require Apple's chain of
+    /// trust AND Nexon as the signer before touching it — regardless of
+    /// whether we downloaded it or found it in ~/Downloads.
+    private func verifyNexonSignature(of pkg: URL) throws {
+        let output = try ProcessRunner.run("/usr/sbin/pkgutil", ["--check-signature", pkg.path])
+        guard output.contains("signed by a developer certificate issued by Apple"),
+              output.localizedCaseInsensitiveContains("nexon") else {
+            throw StepError("\(pkg.lastPathComponent) is not signed by Nexon — refusing to install it. Download the launcher from \(GMSPaths.nexonLauncherPage.absoluteString) and try again.")
+        }
     }
 
     private func newestPkg(in directory: URL) -> URL? {

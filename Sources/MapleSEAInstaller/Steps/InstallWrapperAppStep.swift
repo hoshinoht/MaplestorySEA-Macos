@@ -21,7 +21,7 @@ struct InstallWrapperAppStep: InstallStep {
             // /Applications not writable for this user → retry with admin rights.
             pipeline.log("Retrying copy with administrator privileges…")
             try ProcessRunner.runAsAdmin(
-                shellCommand: "ditto '\(GMSPaths.innerWrapperApp.path)' '\(GMSPaths.installedWrapperApp.path)'"
+                shellCommand: "ditto \(ProcessRunner.shellQuote(GMSPaths.innerWrapperApp.path)) \(ProcessRunner.shellQuote(GMSPaths.installedWrapperApp.path))"
             )
         }
         pipeline.log("MapleStory.app installed to /Applications.")

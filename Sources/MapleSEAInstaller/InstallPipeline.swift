@@ -43,12 +43,25 @@ final class InstallPipeline: ObservableObject {
     @Published var finished = false
     @Published var logLines: [String] = []
     @Published var downloadProgress: (received: Int64, total: Int64) = (0, 0)
+    @Published var downloadRate: Double = 0 // bytes/sec
     @Published var needsAccessibility = false
     @Published var wizardNeedsManualHelp = false
 
     let region: RegionConfig
     let context: PipelineContext
     private var stepImplementations: [any InstallStep] = []
+    private var progressSamples: [(Date, Int64)] = []
+
+    /// Relative effort per step, used for one honest overall progress bar
+    /// instead of six disconnected spinners.
+    private let stepWeights: [String: Double] = [
+        "gms-launcher": 8,
+        "resolve-version": 2,
+        "download-client": 62,
+        "wine-install": 22,
+        "launch-args": 2,
+        "wrapper-app": 4,
+    ]
 
     init(region: RegionConfig) {
         self.region = region
@@ -64,6 +77,48 @@ final class InstallPipeline: ObservableObject {
         self.steps = stepImplementations.map { StepState(id: $0.id, title: $0.title) }
     }
 
+    // MARK: - Derived state for the UI
+
+    var currentStep: StepState? {
+        steps.first { $0.status == .running }
+    }
+
+    var failedStep: StepState? {
+        steps.first { if case .failed = $0.status { return true } else { return false } }
+    }
+
+    /// 0…1 across the whole install, weighted by step effort. The download
+    /// step contributes fractionally by bytes.
+    var overallProgress: Double {
+        let total = stepWeights.values.reduce(0, +)
+        var earned: Double = 0
+        for step in steps {
+            let weight = stepWeights[step.id] ?? 0
+            switch step.status {
+            case .done, .skipped:
+                earned += weight
+            case .running:
+                if step.id == "download-client", downloadProgress.total > 0 {
+                    earned += weight * Double(downloadProgress.received) / Double(downloadProgress.total)
+                } else {
+                    earned += weight * 0.35
+                }
+            case .pending, .failed:
+                break
+            }
+        }
+        return min(1, earned / total)
+    }
+
+    var etaSeconds: Double? {
+        guard downloadRate > 1, downloadProgress.total > 0,
+              currentStep?.id == "download-client" else { return nil }
+        let remaining = Double(downloadProgress.total - downloadProgress.received)
+        return remaining / downloadRate
+    }
+
+    // MARK: - Logging & status
+
     func log(_ message: String) {
         let stamp = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
         logLines.append("[\(stamp)] \(message)")
@@ -75,13 +130,58 @@ final class InstallPipeline: ObservableObject {
         if !detail.isEmpty { steps[index].detail = detail }
     }
 
+    func recordDownloadProgress(received: Int64, total: Int64) {
+        downloadProgress = (received, total)
+        let now = Date()
+        progressSamples.append((now, received))
+        progressSamples.removeAll { now.timeIntervalSince($0.0) > 5 }
+        if let oldest = progressSamples.first, oldest.0 < now {
+            let dt = now.timeIntervalSince(oldest.0)
+            let bytes = Double(received - oldest.1)
+            if dt > 0.5 { downloadRate = max(0, bytes / dt) }
+        }
+    }
+
+    // MARK: - Run
+
     func start() {
         guard !isRunning else { return }
         isRunning = true
         finished = false
+        // A failed step gets another chance; completed work is never redone.
+        for index in steps.indices {
+            if case .failed = steps[index].status {
+                steps[index].status = .pending
+            }
+        }
+        preflightAccessibility()
         Task {
             await runAll()
             isRunning = false
+        }
+    }
+
+    /// Ask for the one permission the run will need *before* the long download,
+    /// so the install never stalls waiting on the user halfway through.
+    private func preflightAccessibility() {
+        let gameInstalled = FileChecks.exists(
+            GMSPaths.bottleDriveC.appendingPathComponent(region.exeRelativeToDriveC))
+        guard !gameInstalled, !WizardClicker.hasAccessibilityPermission else { return }
+
+        needsAccessibility = true
+        WizardClicker.requestAccessibilityPermission()
+        log("Requesting Accessibility permission up front so the installer wizard can be auto-clicked later.")
+
+        // Clear the banner the moment permission is granted.
+        Task { [weak self] in
+            while let self, self.needsAccessibility, !self.finished {
+                if WizardClicker.hasAccessibilityPermission {
+                    self.needsAccessibility = false
+                    self.log("Accessibility permission granted.")
+                    break
+                }
+                try? await Task.sleep(for: .seconds(1))
+            }
         }
     }
 
@@ -93,7 +193,7 @@ final class InstallPipeline: ObservableObject {
                 continue
             }
             if await step.isAlreadyDone(context) {
-                setStatus(step.id, .skipped, detail: "Already done")
+                setStatus(step.id, .skipped, detail: "Already set up")
                 log("\(step.title): already done, skipping")
                 continue
             }
@@ -111,7 +211,7 @@ final class InstallPipeline: ObservableObject {
             }
         }
         finished = true
-        log("All steps complete. Launch MapleStory.app from /Applications to play!")
+        log("Installation complete. MapleStory.app is in /Applications.")
     }
 
     func launchGame() {

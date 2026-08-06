@@ -6,17 +6,14 @@ struct ContentView: View {
 
     var body: some View {
         ZStack {
-            LinearGradient(colors: [MapleTheme.sky, MapleTheme.skyDeep],
+            LinearGradient(colors: [MapleTheme.bgTop, MapleTheme.bgBottom],
                            startPoint: .top, endPoint: .bottom)
                 .ignoresSafeArea()
 
             VStack(spacing: 14) {
                 header
-                questPanel
-                if pipeline.downloadProgress.total > 0 {
-                    ExpBar(fraction: downloadFraction, label: percentLabel)
-                        .padding(.horizontal, 4)
-                }
+                heroCard
+                stepsCard
                 if pipeline.needsAccessibility {
                     accessibilityBanner
                 }
@@ -26,76 +23,141 @@ struct ContentView: View {
                 logSection
                 actionRow
             }
-            .padding(20)
+            .padding(22)
         }
-        .frame(width: 520)
+        .frame(width: 500)
         .fixedSize(horizontal: false, vertical: true)
+        .preferredColorScheme(.dark)
     }
 
-    // MARK: - Sections
+    // MARK: - Header
 
     private var header: some View {
-        VStack(spacing: 2) {
-            HStack(spacing: 8) {
-                Text("🍁")
-                    .font(.system(size: 30))
-                Text("MapleSEA on Mac")
-                    .font(.system(size: 28, weight: .black, design: .rounded))
-                    .foregroundStyle(.white)
-                    .shadow(color: MapleTheme.wood.opacity(0.6), radius: 0, x: 0, y: 2)
-            }
-            Text(pipeline.finished ? "Quest complete!" : "Quest: install MapleStorySEA")
-                .font(.system(size: 13, weight: .semibold, design: .rounded))
-                .foregroundStyle(.white.opacity(0.92))
-        }
-    }
-
-    private var questPanel: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            ForEach(Array(pipeline.steps.enumerated()), id: \.element.id) { index, step in
-                stepRow(step)
-                if index < pipeline.steps.count - 1 {
-                    Rectangle()
-                        .fill(MapleTheme.parchmentDark)
-                        .frame(height: 1)
-                        .padding(.leading, 40)
-                }
-            }
-        }
-        .padding(.vertical, 6)
-        .background(
-            RoundedRectangle(cornerRadius: 12).fill(MapleTheme.parchment)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 12).strokeBorder(MapleTheme.wood, lineWidth: 3)
-        )
-        .shadow(color: .black.opacity(0.3), radius: 4, y: 3)
-    }
-
-    private func stepRow(_ step: StepState) -> some View {
-        HStack(spacing: 12) {
-            statusIcon(step.status)
-                .frame(width: 22, height: 22)
-
+        HStack(spacing: 10) {
+            Text("🍁")
+                .font(.system(size: 26))
             VStack(alignment: .leading, spacing: 1) {
-                Text(step.title)
-                    .font(.system(size: 13.5, weight: .bold, design: .rounded))
-                    .foregroundStyle(MapleTheme.textBrown)
-                if case .failed(let message) = step.status {
-                    Text(message)
-                        .font(.system(size: 11, weight: .medium, design: .rounded))
-                        .foregroundStyle(MapleTheme.fail)
-                        .fixedSize(horizontal: false, vertical: true)
-                } else if !step.detail.isEmpty {
-                    Text(step.detail)
-                        .font(.system(size: 11, weight: .medium, design: .rounded))
-                        .foregroundStyle(MapleTheme.woodLight)
-                }
+                Text("MapleSEA Installer")
+                    .font(.system(size: 19, weight: .bold))
+                    .foregroundStyle(MapleTheme.textPrimary)
+                Text("MapleStorySEA on Apple Silicon — no VM")
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(MapleTheme.textSecondary)
             }
             Spacer()
         }
+    }
+
+    // MARK: - Hero: one headline, one honest progress bar
+
+    private var heroCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(heroTitle)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(heroTitleColor)
+                Spacer()
+                if pipeline.isRunning || pipeline.finished {
+                    Text(String(format: "%.0f%%", pipeline.overallProgress * 100))
+                        .font(.system(size: 13, weight: .medium, design: .monospaced))
+                        .foregroundStyle(MapleTheme.textSecondary)
+                }
+            }
+
+            GradientProgressBar(fraction: pipeline.finished ? 1 : pipeline.overallProgress)
+
+            Text(heroDetail)
+                .font(.system(size: 11.5))
+                .foregroundStyle(MapleTheme.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(16)
+        .glassCard()
+    }
+
+    private var heroTitle: String {
+        if pipeline.finished { return "Ready to play" }
+        if let failed = pipeline.failedStep { return "Stopped at: \(failed.title)" }
+        if let current = pipeline.currentStep { return current.title }
+        return "Ready to install"
+    }
+
+    private var heroTitleColor: Color {
+        if pipeline.finished { return MapleTheme.success }
+        if pipeline.failedStep != nil { return MapleTheme.fail }
+        return MapleTheme.textPrimary
+    }
+
+    private var heroDetail: String {
+        if pipeline.finished {
+            return "MapleStory.app is in your Applications folder."
+        }
+        if let failed = pipeline.failedStep, case .failed(let message) = failed.status {
+            return message
+        }
+        if pipeline.currentStep?.id == "download-client", pipeline.downloadProgress.total > 0 {
+            var parts = [
+                "\(ByteFormat.string(pipeline.downloadProgress.received)) of \(ByteFormat.string(pipeline.downloadProgress.total))"
+            ]
+            if pipeline.downloadRate > 1 {
+                parts.append(ByteFormat.rate(pipeline.downloadRate))
+            }
+            if let eta = pipeline.etaSeconds {
+                parts.append(ByteFormat.eta(eta))
+            }
+            return parts.joined(separator: " · ")
+        }
+        if let current = pipeline.currentStep {
+            return current.detail.isEmpty ? "Working…" : current.detail
+        }
+        return "Downloads the official client and sets everything up. One click, no manual steps."
+    }
+
+    // MARK: - Steps
+
+    private var stepsCard: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(pipeline.steps) { step in
+                stepRow(step)
+            }
+        }
+        .padding(.vertical, 6)
+        .glassCard()
+    }
+
+    private func stepRow(_ step: StepState) -> some View {
+        HStack(spacing: 11) {
+            statusIcon(step.status)
+                .frame(width: 18, height: 18)
+
+            Text(step.title)
+                .font(.system(size: 12.5, weight: step.status == .running ? .semibold : .regular))
+                .foregroundStyle(stepColor(step.status))
+
+            Spacer()
+
+            if step.status == .skipped {
+                Text("Already set up")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(MapleTheme.textTertiary)
+            } else if !step.detail.isEmpty, step.status == .running || step.status == .done {
+                Text(step.detail)
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(MapleTheme.textTertiary)
+                    .lineLimit(1)
+            }
+        }
         .padding(.horizontal, 14)
-        .padding(.vertical, 8)
+        .padding(.vertical, 6.5)
+    }
+
+    private func stepColor(_ status: StepStatus) -> Color {
+        switch status {
+        case .running: return MapleTheme.textPrimary
+        case .done, .skipped: return MapleTheme.textSecondary
+        case .failed: return MapleTheme.fail
+        case .pending: return MapleTheme.textTertiary
+        }
     }
 
     @ViewBuilder
@@ -103,26 +165,32 @@ struct ContentView: View {
         switch status {
         case .pending:
             Circle()
-                .strokeBorder(MapleTheme.woodLight, lineWidth: 2)
+                .strokeBorder(Color.white.opacity(0.18), lineWidth: 1.5)
         case .running:
             ProgressView()
                 .controlSize(.small)
-                .tint(MapleTheme.orange)
-        case .done, .skipped:
+                .tint(MapleTheme.aqua)
+        case .done:
             Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 19, weight: .bold))
-                .foregroundStyle(status == .skipped ? MapleTheme.woodLight : MapleTheme.expGreenDeep)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(MapleTheme.success)
+        case .skipped:
+            Image(systemName: "checkmark.circle")
+                .font(.system(size: 15, weight: .regular))
+                .foregroundStyle(MapleTheme.textTertiary)
         case .failed:
-            Image(systemName: "xmark.circle.fill")
-                .font(.system(size: 19, weight: .bold))
+            Image(systemName: "exclamationmark.circle.fill")
+                .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(MapleTheme.fail)
         }
     }
 
+    // MARK: - Banners
+
     private var accessibilityBanner: some View {
         banner(
-            icon: "hand.raised.fill",
-            text: "Grant Accessibility permission so the installer wizard can be clicked for you.",
+            icon: "accessibility",
+            text: "Allow Accessibility so the game's setup wizard can be clicked for you. You can also decline and click it yourself.",
             buttonTitle: "Open Settings"
         ) {
             WizardClicker.openAccessibilitySettings()
@@ -132,7 +200,7 @@ struct ContentView: View {
     private var manualHelpBanner: some View {
         banner(
             icon: "cursorarrow.click.2",
-            text: "Auto-click unavailable — click through the installer wizard (Next → Install → Finish).",
+            text: "Auto-click is off — click Next → Install → Finish in the setup window to continue.",
             buttonTitle: nil, action: nil
         )
     }
@@ -140,21 +208,24 @@ struct ContentView: View {
     private func banner(icon: String, text: String, buttonTitle: String?, action: (() -> Void)? = nil) -> some View {
         HStack(spacing: 10) {
             Image(systemName: icon)
-                .foregroundStyle(MapleTheme.orangeDeep)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(MapleTheme.mapleOrange)
             Text(text)
-                .font(.system(size: 12, weight: .semibold, design: .rounded))
-                .foregroundStyle(MapleTheme.textBrown)
+                .font(.system(size: 11.5))
+                .foregroundStyle(MapleTheme.textPrimary)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer()
             if let buttonTitle, let action {
                 Button(buttonTitle, action: action)
-                    .buttonStyle(MapleButtonStyle(prominent: false))
+                    .buttonStyle(MaplePillButtonStyle(prominent: false))
             }
         }
-        .padding(10)
-        .background(RoundedRectangle(cornerRadius: 10).fill(MapleTheme.parchment))
-        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(MapleTheme.orange, lineWidth: 2))
+        .padding(12)
+        .background(RoundedRectangle(cornerRadius: 12).fill(MapleTheme.mapleOrange.opacity(0.08)))
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(MapleTheme.mapleOrange.opacity(0.35), lineWidth: 1))
     }
+
+    // MARK: - Log
 
     private var logSection: some View {
         DisclosureGroup(isExpanded: $showLog) {
@@ -163,61 +234,52 @@ struct ContentView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         ForEach(Array(pipeline.logLines.enumerated()), id: \.offset) { index, line in
                             Text(line)
-                                .font(.system(size: 10.5, design: .monospaced))
-                                .foregroundStyle(MapleTheme.textBrown)
+                                .font(.system(size: 10, design: .monospaced))
+                                .foregroundStyle(MapleTheme.textSecondary)
                                 .frame(maxWidth: .infinity, alignment: .leading)
+                                .textSelection(.enabled)
                                 .id(index)
                         }
                     }
-                    .padding(8)
+                    .padding(10)
                 }
-                .frame(height: 140)
-                .background(RoundedRectangle(cornerRadius: 8).fill(MapleTheme.parchment.opacity(0.9)))
-                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(MapleTheme.wood, lineWidth: 2))
+                .frame(height: 130)
+                .glassCard()
                 .onChange(of: pipeline.logLines.count) {
                     if let last = pipeline.logLines.indices.last {
                         proxy.scrollTo(last, anchor: .bottom)
                     }
                 }
             }
+            .padding(.top, 6)
         } label: {
-            Text("Log")
-                .font(.system(size: 12, weight: .bold, design: .rounded))
-                .foregroundStyle(.white)
+            Text("Details")
+                .font(.system(size: 11.5, weight: .medium))
+                .foregroundStyle(MapleTheme.textSecondary)
         }
-        .tint(.white)
+        .tint(MapleTheme.textSecondary)
     }
+
+    // MARK: - Actions
 
     private var actionRow: some View {
         HStack {
             Spacer()
             if pipeline.finished {
                 Button("Play MapleSEA") { pipeline.launchGame() }
-                    .buttonStyle(MapleButtonStyle())
+                    .buttonStyle(MaplePillButtonStyle())
+                    .keyboardShortcut(.defaultAction)
+            } else if pipeline.isRunning {
+                Button("Installing…") {}
+                    .buttonStyle(MaplePillButtonStyle())
+                    .disabled(true)
             } else {
-                Button(pipeline.isRunning ? "Questing…" : hasFailure ? "Retry Quest" : "Start Quest") {
+                Button(pipeline.failedStep == nil ? "Install MapleSEA" : "Try Again") {
                     pipeline.start()
                 }
-                .buttonStyle(MapleButtonStyle())
-                .disabled(pipeline.isRunning)
+                .buttonStyle(MaplePillButtonStyle())
+                .keyboardShortcut(.defaultAction)
             }
-            Spacer()
         }
-    }
-
-    // MARK: - Derived
-
-    private var downloadFraction: Double {
-        let (received, total) = pipeline.downloadProgress
-        guard total > 0 else { return 0 }
-        return min(1, Double(received) / Double(total))
-    }
-
-    private var percentLabel: String {
-        String(format: "%.1f%%", downloadFraction * 100)
-    }
-
-    private var hasFailure: Bool {
-        pipeline.steps.contains { if case .failed = $0.status { return true } else { return false } }
     }
 }

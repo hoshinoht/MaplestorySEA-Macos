@@ -12,6 +12,13 @@ enum ProcessError: LocalizedError {
 }
 
 enum ProcessRunner {
+    /// POSIX-quotes a string for safe interpolation into a shell command.
+    /// Wraps in single quotes and escapes embedded single quotes, so no
+    /// character in `value` can terminate the quoting.
+    static func shellQuote(_ value: String) -> String {
+        "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
+    }
+
     /// Runs a command to completion, returning combined stdout+stderr.
     @discardableResult
     static func run(_ executable: String, _ arguments: [String], currentDirectory: URL? = nil) throws -> String {

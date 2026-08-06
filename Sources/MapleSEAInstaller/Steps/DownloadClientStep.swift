@@ -23,7 +23,7 @@ struct DownloadClientStep: InstallStep {
 
         let downloader = Downloader { received, total in
             Task { @MainActor in
-                pipeline.downloadProgress = (received, total)
+                pipeline.recordDownloadProgress(received: received, total: total)
             }
         }
         try await downloader.downloadAll(urls: release.fileURLs, to: clientDir)
