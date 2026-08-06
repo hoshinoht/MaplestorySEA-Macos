@@ -14,8 +14,9 @@ A one-click SwiftUI installer app that automates the whole thing:
    Falls back to probing PlayPark's CDN directly if the page layout changes.
 3. **Download the full client** — `setup.exe` + all `setup-N.bin` parts, resumable,
    straight from PlayPark's CDN.
-4. **Run the installer under Wine** — auto-clicks through the InstallShield wizard
-   (Accessibility permission), or you click Next → Install → Finish yourself.
+4. **Run the installer under Wine** — silently (`/VERYSILENT`; the client ships an
+   Inno Setup installer), no wizard and no clicks. If a region's installer ignores
+   the flags, click through the wizard that appears — completion is detected either way.
 5. **Repoint the launcher** — writes `.ms-launch-args` into the bottle's `drive_c`
    and locks it with `chflags uchg` so the launcher can't delete it.
 6. **Install `MapleStory.app`** — copies the wrapper app to `/Applications`.
@@ -46,7 +47,8 @@ xattr -d com.apple.quarantine "build/MapleSEA Installer.app"
 | Permission | Why | Optional? |
 |---|---|---|
 | Administrator password | Installing Nexon's launcher pkg | Skipped if the launcher is already installed |
-| Accessibility | Auto-clicking the InstallShield wizard | Yes — click the wizard manually instead |
+
+That's the only one — the MapleSEA installer itself runs silently under Wine.
 
 ## How the launcher redirect works
 

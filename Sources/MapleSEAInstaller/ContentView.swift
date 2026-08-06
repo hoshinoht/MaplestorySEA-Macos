@@ -14,12 +14,6 @@ struct ContentView: View {
                 header
                 heroCard
                 stepsCard
-                if pipeline.needsAccessibility {
-                    accessibilityBanner
-                }
-                if pipeline.wizardNeedsManualHelp {
-                    manualHelpBanner
-                }
                 logSection
                 actionRow
             }
@@ -183,46 +177,6 @@ struct ContentView: View {
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(MapleTheme.fail)
         }
-    }
-
-    // MARK: - Banners
-
-    private var accessibilityBanner: some View {
-        banner(
-            icon: "accessibility",
-            text: "Allow Accessibility so the game's setup wizard can be clicked for you. You can also decline and click it yourself.",
-            buttonTitle: "Open Settings"
-        ) {
-            WizardClicker.openAccessibilitySettings()
-        }
-    }
-
-    private var manualHelpBanner: some View {
-        banner(
-            icon: "cursorarrow.click.2",
-            text: "Auto-click is off — click Next → Install → Finish in the setup window to continue.",
-            buttonTitle: nil, action: nil
-        )
-    }
-
-    private func banner(icon: String, text: String, buttonTitle: String?, action: (() -> Void)? = nil) -> some View {
-        HStack(spacing: 10) {
-            Image(systemName: icon)
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(MapleTheme.mapleOrange)
-            Text(text)
-                .font(.system(size: 11.5))
-                .foregroundStyle(MapleTheme.textPrimary)
-                .fixedSize(horizontal: false, vertical: true)
-            Spacer()
-            if let buttonTitle, let action {
-                Button(buttonTitle, action: action)
-                    .buttonStyle(MaplePillButtonStyle(prominent: false))
-            }
-        }
-        .padding(12)
-        .background(RoundedRectangle(cornerRadius: 12).fill(MapleTheme.mapleOrange.opacity(0.08)))
-        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(MapleTheme.mapleOrange.opacity(0.35), lineWidth: 1))
     }
 
     // MARK: - Log

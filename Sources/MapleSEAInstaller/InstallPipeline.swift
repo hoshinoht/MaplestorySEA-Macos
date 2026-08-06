@@ -44,8 +44,6 @@ final class InstallPipeline: ObservableObject {
     @Published var logLines: [String] = []
     @Published var downloadProgress: (received: Int64, total: Int64) = (0, 0)
     @Published var downloadRate: Double = 0 // bytes/sec
-    @Published var needsAccessibility = false
-    @Published var wizardNeedsManualHelp = false
 
     let region: RegionConfig
     let context: PipelineContext
@@ -154,34 +152,9 @@ final class InstallPipeline: ObservableObject {
                 steps[index].status = .pending
             }
         }
-        preflightAccessibility()
         Task {
             await runAll()
             isRunning = false
-        }
-    }
-
-    /// Ask for the one permission the run will need *before* the long download,
-    /// so the install never stalls waiting on the user halfway through.
-    private func preflightAccessibility() {
-        let gameInstalled = FileChecks.exists(
-            GMSPaths.bottleDriveC.appendingPathComponent(region.exeRelativeToDriveC))
-        guard !gameInstalled, !WizardClicker.hasAccessibilityPermission else { return }
-
-        needsAccessibility = true
-        WizardClicker.requestAccessibilityPermission()
-        log("Requesting Accessibility permission up front so the installer wizard can be auto-clicked later.")
-
-        // Clear the banner the moment permission is granted.
-        Task { [weak self] in
-            while let self, self.needsAccessibility, !self.finished {
-                if WizardClicker.hasAccessibilityPermission {
-                    self.needsAccessibility = false
-                    self.log("Accessibility permission granted.")
-                    break
-                }
-                try? await Task.sleep(for: .seconds(1))
-            }
         }
     }
 
