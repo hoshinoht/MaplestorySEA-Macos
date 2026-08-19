@@ -100,25 +100,22 @@ jobs:
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_NOTES: |
+            ## macOS quarantine note
+
+            This app is ad-hoc signed and not notarized. After verifying the provided SHA-256 checksum, first try **System Settings → Privacy & Security → Open Anyway**. If macOS still blocks the extracted app, run:
+
+            ```bash
+            xattr -dr com.apple.quarantine "/Applications/MapleSEA Installer.app"
+            ```
+
+            Only remove quarantine from an app downloaded from this repository's official GitHub release.
         run: |
-          quarantine_note=$(cat <<'EOF'
-          ## macOS quarantine note
-
-          This app is ad-hoc signed and not notarized. After verifying the provided SHA-256 checksum, first try **System Settings → Privacy & Security → Open Anyway**. If macOS still blocks the extracted app, run:
-
-          ```bash
-          xattr -dr com.apple.quarantine "/Applications/MapleSEA Installer.app"
-          ```
-
-          Only remove quarantine from an app downloaded from this repository's official GitHub release.
-          EOF
-          )
-
           gh release create "$GITHUB_REF_NAME" \
             "dist/MapleSEA-Installer-${GITHUB_REF_NAME}.zip#MapleSEA Installer ${GITHUB_REF_NAME}" \
             "dist/MapleSEA-Installer-${GITHUB_REF_NAME}.zip.sha256#SHA-256 checksum" \
             --verify-tag \
             --title "MapleSEA Installer ${GITHUB_REF_NAME}" \
             --generate-notes \
-            --notes "$quarantine_note" \
+            --notes "$RELEASE_NOTES" \
             --latest
