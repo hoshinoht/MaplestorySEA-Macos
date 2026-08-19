@@ -1,0 +1,124 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release:
+    name: Build and publish release
+    if: github.event.created && !github.event.deleted && !github.event.forced
+    runs-on: macos-15
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate release tag
+        run: |
+          if [[ ! "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Release tags must use vMAJOR.MINOR.PATCH." >&2
+            exit 1
+          fi
+          echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+
+      - name: Run tests when present
+        run: |
+          description="$RUNNER_TEMP/package-description.json"
+          swift package describe --type json > "$description"
+          has_tests="$(python3 -c \
+            'import json, sys; print(str(any(t.get("type") == "test" for t in json.load(open(sys.argv[1]))["targets"])).lower())' \
+            "$description")"
+
+          if [[ "$has_tests" == "true" ]]; then
+            swift test
+          else
+            echo "No test target is present on this tag."
+          fi
+
+      - name: Build app bundle
+        run: ./build.sh
+
+      - name: Stamp and re-sign app bundle
+        run: |
+          plist="build/MapleSEA Installer.app/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$plist"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $GITHUB_RUN_NUMBER" "$plist"
+          codesign --force --sign - "build/MapleSEA Installer.app"
+
+      - name: Verify release bundle
+        run: |
+          plist="build/MapleSEA Installer.app/Contents/Info.plist"
+          [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$plist")" == "$VERSION" ]]
+          plutil -lint "$plist"
+          codesign --verify --deep --strict --verbose=2 "build/MapleSEA Installer.app"
+          codesign -dvv "build/MapleSEA Installer.app" 2>&1 | grep -q '^Signature=adhoc$'
+          file "build/MapleSEA Installer.app/Contents/MacOS/MapleSEAInstaller" | tee /dev/stderr | grep -q arm64
+
+      - name: Package release assets
+        run: |
+          mkdir -p dist
+          asset="dist/MapleSEA-Installer-${GITHUB_REF_NAME}.zip"
+          ditto -c -k --sequesterRsrc --keepParent \
+            "build/MapleSEA Installer.app" \
+            "$asset"
+          (
+            cd dist
+            shasum -a 256 "$(basename "$asset")" > "$(basename "$asset").sha256"
+          )
+
+      - name: Verify release provenance
+        run: |
+          git fetch --force --no-tags origin \
+            "refs/heads/master:refs/remotes/origin/master" \
+            "refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}"
+
+          tag_commit="$(git rev-list -n 1 "$GITHUB_REF_NAME")"
+          head_commit="$(git rev-parse HEAD)"
+          if [[ "$tag_commit" != "$head_commit" ]]; then
+            echo "Remote tag moved after this workflow checked it out." >&2
+            exit 1
+          fi
+
+          if ! git merge-base --is-ancestor "$head_commit" refs/remotes/origin/master; then
+            echo "Release tags must point to a commit contained in master." >&2
+            exit 1
+          fi
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          quarantine_note=$(cat <<'EOF'
+          ## macOS quarantine note
+
+          This app is ad-hoc signed and not notarized. After verifying the provided SHA-256 checksum, first try **System Settings → Privacy & Security → Open Anyway**. If macOS still blocks the extracted app, run:
+
+          ```bash
+          xattr -dr com.apple.quarantine "/Applications/MapleSEA Installer.app"
+          ```
+
+          Only remove quarantine from an app downloaded from this repository's official GitHub release.
+          EOF
+          )
+
+          gh release create "$GITHUB_REF_NAME" \
+            "dist/MapleSEA-Installer-${GITHUB_REF_NAME}.zip#MapleSEA Installer ${GITHUB_REF_NAME}" \
+            "dist/MapleSEA-Installer-${GITHUB_REF_NAME}.zip.sha256#SHA-256 checksum" \
+            --verify-tag \
+            --title "MapleSEA Installer ${GITHUB_REF_NAME}" \
+            --generate-notes \
+            --notes "$quarantine_note" \
+            --latest

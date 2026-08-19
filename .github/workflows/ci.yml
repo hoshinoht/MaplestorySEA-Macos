@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - master
+      - develop
+      - "feature/**"
+  pull_request:
+    branches:
+      - master
+      - develop
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build and test
+    runs-on: macos-15
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Build Swift package
+        run: swift build
+
+      - name: Run tests when present
+        run: |
+          description="$RUNNER_TEMP/package-description.json"
+          swift package describe --type json > "$description"
+          has_tests="$(python3 -c \
+            'import json, sys; print(str(any(t.get("type") == "test" for t in json.load(open(sys.argv[1]))["targets"])).lower())' \
+            "$description")"
+
+          if [[ "$has_tests" == "true" ]]; then
+            swift test
+          else
+            echo "No test target is present on this branch."
+          fi
+
+      - name: Build app bundle
+        run: ./build.sh
+
+      - name: Verify app bundle
+        run: |
+          plutil -lint "build/MapleSEA Installer.app/Contents/Info.plist"
+          codesign --verify --deep --strict --verbose=2 "build/MapleSEA Installer.app"
+          codesign -dvv "build/MapleSEA Installer.app" 2>&1 | grep -q '^Signature=adhoc$'
+          file "build/MapleSEA Installer.app/Contents/MacOS/MapleSEAInstaller" | tee /dev/stderr | grep -q arm64
+
+      - name: Package branch artifact
+        if: github.event_name != 'pull_request'
+        run: |
+          short_sha="${GITHUB_SHA:0:7}"
+          ditto -c -k --sequesterRsrc --keepParent \
+            "build/MapleSEA Installer.app" \
+            "build/MapleSEA-Installer-${short_sha}.zip"
+
+      - name: Upload branch artifact
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: MapleSEA-Installer-${{ github.sha }}
+          path: build/MapleSEA-Installer-*.zip
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14

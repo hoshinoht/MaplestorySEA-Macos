@@ -25,6 +25,27 @@ A one-click SwiftUI installer app that automates the whole thing:
 
 Docs site: **https://maplesea.hoshinoht.dev**
 
+## Download a release
+
+Download the latest `MapleSEA-Installer-v*.zip` and its `.sha256` file from
+[GitHub Releases](https://github.com/hoshinoht/MaplestorySEA-Macos/releases/latest).
+Verify the checksum before opening the archive:
+
+```bash
+shasum -a 256 -c MapleSEA-Installer-v*.zip.sha256
+```
+
+The app is **ad-hoc signed and not notarized**, so macOS may quarantine it after
+download. First try **System Settings → Privacy & Security → Open Anyway**. If it
+remains blocked, move the app to `/Applications` and clear quarantine:
+
+```bash
+xattr -dr com.apple.quarantine "/Applications/MapleSEA Installer.app"
+```
+
+Only remove quarantine from an app downloaded from this repository's official
+GitHub release and verified against the published checksum.
+
 ## Build & run
 
 Requires macOS 14+ and the Xcode Command Line Tools (`xcode-select --install`).
@@ -37,12 +58,9 @@ cd MaplestorySEA-Macos
 open "build/MapleSEA Installer.app"
 ```
 
-The app is **ad-hoc signed**. On first launch macOS blocks it once — approve it under
-**System Settings → Privacy & Security → "Open Anyway"**, or clear quarantine yourself:
-
-```bash
-xattr -d com.apple.quarantine "build/MapleSEA Installer.app"
-```
+Locally built apps are ad-hoc signed by `build.sh`. They do not normally inherit
+browser quarantine; if you transferred the build through a quarantining app, use
+the same `xattr -dr` command above with the local app's path.
 
 ## Permissions
 
